@@ -33,3 +33,6 @@ assets/audio/generated/
 # Claude local state (but keep agents and memory)
 .claude/plans/
 .claude/todos/
+
+# Raw data dumps (too large for git)
+data/raw/
