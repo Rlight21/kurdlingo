@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__notebooklm-mcp__notebook_list",
+      "mcp__notebooklm-mcp__notebook_describe",
+      "mcp__qwen-brain__list_models",
+      "mcp__qwen-brain__ask_model",
+      "mcp__web-researcher__tavily_search"
+    ]
+  }
+}
