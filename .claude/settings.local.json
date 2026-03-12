@@ -5,7 +5,13 @@
       "mcp__notebooklm-mcp__notebook_describe",
       "mcp__qwen-brain__list_models",
       "mcp__qwen-brain__ask_model",
-      "mcp__web-researcher__tavily_search"
+      "mcp__web-researcher__tavily_search",
+      "Bash(gh repo:*)",
+      "Bash(where gh:*)",
+      "Bash(winget list:*)",
+      "mcp__notebooklm-mcp__notebook_create",
+      "mcp__notebooklm-mcp__source_add",
+      "mcp__notebooklm-mcp__studio_create"
     ]
   }
 }
