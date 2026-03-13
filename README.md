@@ -1,67 +1,107 @@
 # Kurdlingo
 
 > A Duolingo-inspired mobile app for learning Kurdish (Kurmanji dialect) — iOS & Android.
+> Built by a native Kurmanji speaker. Designed for the Kurdish diaspora.
 
 ---
 
 ## Why Kurdlingo?
 
-Kurdish is spoken by 30–40 million people worldwide, yet no major language learning platform offers a quality Kurdish course. Kurdlingo fills this gap with a gamified, science-backed mobile experience built by and for the Kurdish community — starting with Kurmanji, the most widely spoken dialect.
+Kurdish is spoken by 30–40 million people worldwide. The Kurmanji dialect alone has ~15 million speakers — yet no major language platform (Duolingo, Babbel, Pimsleur) offers a Kurmanji course. Existing Kurdish apps are either limited in scope or plagued by technical bugs.
+
+Kurdlingo fills this gap with:
+- A **science-backed SRS engine** (FSRS v4) for vocabulary retention
+- A **structured curriculum** from A1 to B1, including Kurmanji verb morphology and ezafe
+- **Diaspora-first design** — gamification engineered for heritage learners, not tourist phrasebooks
+- **Native speaker authority** — all linguistic content validated by a fluent Kurmanji speaker
 
 ---
 
 ## Current Status
 
-**Research Phase** — gathering literature, making architecture decisions, building documentation before any code is written.
+**Research Phase complete → entering coding phase.**
 
-See [`/docs/`](docs/) for all deliverables.
+All architecture decisions are locked and documented. Sprint 1 (PoC) is ready to begin.
 
----
-
-## Target Users
-
-- **Primary:** Kurdish diaspora (heritage learners in Netherlands, Germany, Sweden, UK) wanting to reconnect with their language
-- **Secondary:** Complete beginners with no prior Kurdish knowledge
-
----
-
-## Planned Features (MVP)
-
-- Skill tree with A1 → B1 Kurmanji curriculum
-- Spaced repetition (FSRS v4) for vocabulary retention
-- Audio for all vocabulary (KurdishTTS.com API + native speaker recordings)
-- Gamification: XP, streaks, progress tracking
-- Special character support (ê, î, û, ç, ş)
-- Offline-capable with Supabase sync
+| Document | Status |
+|---|---|
+| [`docs/architecture/ADR.md`](docs/architecture/ADR.md) | ✓ Complete — 10 architecture decisions |
+| [`docs/architecture/srs-spec.md`](docs/architecture/srs-spec.md) | ✓ Complete — FSRS v4 spec + Dart skeleton |
+| [`docs/architecture/schema.md`](docs/architecture/schema.md) | ✓ Complete — Supabase PostgreSQL schema |
+| [`docs/architecture/poc-spec.md`](docs/architecture/poc-spec.md) | ✓ Complete — Sprint 1 coding handoff |
+| [`docs/design/exercise-types.md`](docs/design/exercise-types.md) | ✓ Complete — 13 exercise types, MVP build order |
+| [`docs/design/ui-spec.md`](docs/design/ui-spec.md) | ✓ Complete — char picker + skill tree wireframes |
+| [`docs/design/gamification-spec.md`](docs/design/gamification-spec.md) | ✓ Complete — diaspora-aware gamification |
+| [`docs/content/curriculum-v0.md`](docs/content/curriculum-v0.md) | ✓ Draft — 200 A1 words, native speaker review needed |
+| [`docs/content/linguistic-spec.md`](docs/content/linguistic-spec.md) | ⏳ Awaiting native speaker (user) |
+| [`docs/research/competitive-analysis.md`](docs/research/competitive-analysis.md) | ✓ Complete |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Mobile | Flutter (Dart) |
-| Backend | Supabase (PostgreSQL) |
-| State | Riverpod |
-| SRS | FSRS v4 |
-| Audio | KurdishTTS.com API |
+| Layer | Technology | Rationale |
+|---|---|---|
+| Mobile | **Flutter** (Dart) | AOT performance, single codebase, HarfBuzz Unicode |
+| Backend | **Supabase** (PostgreSQL) | Relational SRS schema, RLS, predictable pricing |
+| State | **Riverpod** | Compile-time safe, testable providers |
+| SRS | **FSRS v4** | Outperforms SM-2; no training data needed |
+| Audio | **KurdishTTS.com** + native recordings | API for bulk; native speaker validates accent |
+| Content | **JSON/YAML in repo** (MVP) | Version-controlled, Qwen-generatable |
+
+---
+
+## Kurmanji Language Notes
+
+- **Script:** Latin-based, left-to-right
+- **Special characters:** ê (U+00EA), î (U+00EE), û (U+00FB), ç (U+00E7), ş (U+015F)
+- **Input:** Character picker bar above keyboard (not long-press — unreliable on Android)
+- **Grammar highlights:** ezafe construction, verb root system (present/past stems), SOV word order
+- **Future:** Sorani (Arabic script, RTL) and Zazaki may be added — architecture is extensible
 
 ---
 
 ## Roadmap
 
-- [ ] **Research Phase** ← *we are here*
-- [ ] Architecture & Design Decisions
-- [ ] PoC: Single lesson, one exercise type, audio playback
-- [ ] MVP Sprint 1: Core skill tree, 5 exercise types, user accounts
-- [ ] MVP Sprint 2: Full A1 curriculum, streak system, audio complete
-- [ ] Beta: Closed testing with Kurdish community
+- [x] **Research Phase** — literature, architecture decisions, design specs
+- [ ] **PoC** ← *starting now* — 1 lesson, 5 MC cards, FSRS sync, auth, char picker
+- [ ] **MVP Sprint 1** — core skill tree, 5 exercise types, user accounts, A1.1 content
+- [ ] **MVP Sprint 2** — full A1 curriculum, audio complete, streak system
+- [ ] **Beta** — closed testing with Kurdish diaspora community
+- [ ] **v1.0** — public launch, App Store + Google Play
+
+---
+
+## Docs Structure
+
+```
+docs/
+  architecture/
+    ADR.md              ← All 10 architecture decisions
+    srs-spec.md         ← FSRS v4 spec + Dart skeleton
+    schema.md           ← Supabase PostgreSQL schema + SQL migration
+    poc-spec.md         ← PoC coding handoff (Sprint 1)
+  content/
+    linguistic-spec.md  ← Kurmanji alphabet, phonology, grammar (USER writes)
+    curriculum-v0.md    ← A1 skill tree skeleton + 200 vocabulary words
+  design/
+    exercise-types.md   ← 13 exercise types + MVP build order
+    ui-spec.md          ← Screen wireframes, char picker, skill tree
+    gamification-spec.md← XP, streaks, diaspora-aware design decisions
+  research/
+    competitive-analysis.md ← App comparison, user personas, market gaps
+```
 
 ---
 
 ## Contributing
 
-This project is in early research. Contributions welcome once the MVP phase begins — especially from native Kurdish speakers, educators, and Flutter developers.
+Contributions welcome — especially from:
+- **Native Kurdish speakers** (linguistic validation, content review)
+- **Kurdish community members** (user research, feedback)
+- **Flutter developers** (once Sprint 1 begins)
+
+All linguistic content must be validated by a native Kurmanji speaker before entering the app.
 
 ---
 
