@@ -1,7 +1,7 @@
 # Kurdlingo — Project CLAUDE.md
 
 ## What Is This Project
-Kurdlingo is a Duolingo-inspired mobile app for learning Kurdish, starting with the Kurmanji dialect. Targets iOS and Android. The developer is a **native Kurmanji speaker** who validates all linguistic content.
+Kurdlingo is a Duolingo-inspired mobile app for learning Kurdish, starting with the Kurmanji dialect. **iOS-native** (SwiftUI). The developer is a **native Kurmanji speaker** who validates all linguistic content.
 
 ---
 
@@ -9,16 +9,16 @@ Kurdlingo is a Duolingo-inspired mobile app for learning Kurdish, starting with 
 
 | Agent | Model | Tools | Responsibility |
 |---|---|---|---|
-| Claude (Staff Manager) | Sonnet 4.6 | All | Orchestrate, delegate, review deliverables |
+| Claude (Staff Manager) | Opus 4.6 | All | Orchestrate, delegate, review deliverables |
 | `researcher` | Haiku (fast) | Tavily + NotebookLM | Literature search, NotebookLM population, Briefing Docs |
-| `frontend` | Sonnet | Read/Write/Bash | Flutter UI/UX, wireframes, character input design |
-| `backend` | Sonnet + Qwen 480b | Qwen MCP + Read/Write/Bash | Supabase schema, FSRS algorithm, PoC spec |
+| `frontend` | DeepSeek V3.2 | DeepSeek MCP + Read/Write/Bash | SwiftUI UI/UX, wireframes, character input design |
+| `backend` | Qwen 3 coder 480b | Qwen MCP + Read/Write/Bash | Supabase schema, FSRS algorithm, PoC spec |
 
 **Sub-agent files:** `.claude/agents/` (project-local, not global)
 
 **When to delegate:**
 - Research / literature → `researcher`
-- UI/UX / Flutter component design → `frontend`
+- UI/UX / SwiftUI component design → `frontend`
 - Schema / algorithm / data pipeline → `backend`
 
 ---
@@ -27,9 +27,9 @@ Kurdlingo is a Duolingo-inspired mobile app for learning Kurdish, starting with 
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Mobile framework | **Flutter (Dart)** | Best animation performance; Riverpod ecosystem |
+| Mobile framework | **SwiftUI (Swift)** | iOS-native performance; first-class Apple ecosystem |
 | Backend | **Supabase** | Relational schema for SRS; predictable pricing |
-| State management | **Riverpod** | Flutter-native, testable |
+| State management | **SwiftUI @Observable + SwiftData** | Native Apple state management |
 | SRS algorithm | **FSRS v4** | Outperforms SM-2; no training data needed |
 | Audio | **KurdishTTS.com API** + native recordings | API for bulk; native speaker validates Kurmanji accent |
 | Content format | **JSON/YAML in repo** (MVP) | Simple, version-controlled, Qwen-generatable |
@@ -49,7 +49,7 @@ Kurdlingo is a Duolingo-inspired mobile app for learning Kurdish, starting with 
 
 - **Script:** Latin-based, LTR
 - **Special characters:** ê (U+00EA), î (U+00EE), û (U+00FB), ç (U+00E7), ş (U+015F)
-- **Keyboard:** Character picker bar above keyboard for typing exercises (not long-press — unreliable on Android)
+- **Keyboard:** Character picker bar above keyboard for typing exercises
 - **Future dialects:** Sorani (Arabic script, RTL) and Zazaki may be added later — architect for extensibility
 - **Grammar features:** ezafe construction, verb root system (present/past stems), SOV word order
 
@@ -78,7 +78,7 @@ See `/docs/` for all deliverables. Coding begins when `docs/architecture/poc-spe
 docs/
   architecture/
     ADR.md              ← All architecture decisions (backend agent B1)
-    srs-spec.md         ← FSRS v4 spec + Dart skeleton (backend B2)
+    srs-spec.md         ← FSRS v4 spec + Swift skeleton (backend B2)
     schema.md           ← Supabase PostgreSQL schema (backend B3)
     poc-spec.md         ← PoC coding handoff doc (backend B4)
   content/

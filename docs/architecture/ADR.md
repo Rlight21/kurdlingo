@@ -2,7 +2,7 @@
 
 > **Project:** Kurdlingo — Duolingo-inspired Kurmanji Kurdish Learning App
 > **Owner:** Backend Architect Agent (Task B1)
-> **Status:** LOCKED — All 7 core decisions confirmed. No re-debate.
+> **Status:** LOCKED — Core decisions confirmed. ADR-011 supersedes ADR-001 and ADR-003 (iOS native pivot).
 > **Last Updated:** 2026-03-12
 > **Reviewers:** Staff Manager, Lead Engineer
 
@@ -20,12 +20,13 @@
 8. [ADR-008: Offline-First Architecture for SRS Engine](#adr-008-offline-first-architecture-for-srs-engine)
 9. [ADR-009: Kurmanji-Specific Technical Considerations](#adr-009-kurmanji-specific-technical-considerations)
 10. [ADR-010: CI/CD Pipeline](#adr-010-cicd-pipeline)
+11. [ADR-011: iOS Native Pivot — SwiftUI](#adr-011-ios-native-pivot--swiftui) *(supersedes ADR-001, ADR-003)*
 
 ---
 
 ## ADR-001: Mobile Framework — Flutter
 
-**Status:** LOCKED
+**Status:** SUPERSEDED by ADR-011
 **Decision Date:** 2026-03-12
 
 ### Context
@@ -107,7 +108,7 @@ Kurdlingo needs a backend that provides: user authentication (email/password, so
 
 ## ADR-003: State Management — Riverpod
 
-**Status:** LOCKED
+**Status:** SUPERSEDED by ADR-011
 **Decision Date:** 2026-03-12
 
 ### Context
@@ -677,7 +678,48 @@ FSRS state schema changes must be backwards-compatible for at least one app vers
 
 ---
 
-## Appendix: Open Questions (Post-MVP)
+## ADR-011: iOS Native Pivot — SwiftUI
+
+**Status:** LOCKED
+**Decision Date:** 2026-03-14
+**Supersedes:** ADR-001 (Flutter), ADR-003 (Riverpod)
+
+### Context
+
+After completing the research phase, the project owner decided to target **iOS only** for the MVP, dropping the cross-platform requirement. The Kurdish diaspora audience skews heavily toward iPhone users in Western Europe and North America. A native iOS app delivers better performance, tighter Apple ecosystem integration (Sign in with Apple, StoreKit, AVSpeechSynthesizer), and simpler deployment via Xcode + TestFlight. The small team size argument that favored Flutter is offset by the fact that maintaining one native platform is simpler than one cross-platform framework with platform-specific workarounds.
+
+### Decision
+
+**SwiftUI (Swift)** replaces Flutter (Dart) as the mobile framework. **@Observable / SwiftData** replaces Riverpod as the state management approach.
+
+### New Tech Stack
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| UI framework | **SwiftUI** | Declarative, native iOS, first-class Apple support |
+| Language | **Swift 5.9+** | Modern concurrency (async/await, actors), strong typing |
+| State management | **@Observable + SwiftData** | Native to SwiftUI, no third-party dependencies |
+| Local persistence | **SwiftData** (Core Data successor) | Offline-first SRS card storage, iCloud sync possible |
+| Backend | **Supabase** (unchanged) | PostgreSQL + Auth + Storage — `supabase-swift` SDK |
+| SRS algorithm | **FSRS v4** (unchanged) | Rewritten in Swift (was Dart skeleton) |
+| Audio | **AVFoundation + KurdishTTS.com API** (unchanged) | Native audio playback, background audio support |
+| Content format | **JSON in repo** (unchanged) | Decoded via Swift `Codable` |
+
+### Consequences
+
+- **Positive:** Native performance, smaller binary size (~5MB vs ~15MB), first-class accessibility (VoiceOver), StoreKit for subscriptions, WidgetKit for streak widgets, no JavaScript/Dart bridge overhead.
+- **Negative:** No Android support in MVP. Android users must wait for a future phase (could use KMP for shared logic later).
+- **Migration impact:** SRS Dart skeleton → Swift rewrite. poc-spec.md Sprint 1 tasks updated for Xcode/SwiftUI. Frontend agent reconfigured for SwiftUI.
+
+### Alternatives Reconsidered
+
+| Option | Status |
+|---|---|
+| Flutter (Dart) | Dropped — cross-platform not needed for iOS-only MVP |
+| React Native | Same rationale as ADR-001 rejection, plus iOS-native is now preferred |
+| Kotlin Multiplatform | Deferred — may be used later for shared business logic if Android is added |
+
+---
 
 The following questions are deferred to V2 design and must not block MVP development:
 

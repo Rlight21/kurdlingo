@@ -14,7 +14,7 @@
 4. [Core Formulas](#4-core-formulas)
 5. [Rating Scale](#5-rating-scale)
 6. [Integration with Kurdlingo](#6-integration-with-kurdlingo)
-7. [Dart Skeleton Code](#7-dart-skeleton-code)
+7. [Swift Skeleton Code](#7-swift-skeleton-code)
 
 ---
 
@@ -86,40 +86,40 @@ Relearning  — Card lapsed (Again in Review state); short re-learning intervals
 
 ### 2.2 FSRSCard fields
 
-| Field | Dart type | Description |
+| Field | Swift type | Description |
 |---|---|---|
 | `id` | `String` | UUID; maps to `vocabulary_item.id` in Supabase |
-| `stability` | `double` | S — days until R drops to 90%; initially set by first review rating |
-| `difficulty` | `double` | D — inherent card difficulty, range [1, 10] |
-| `retrievability` | `double` | R — estimated recall probability at review time, range [0, 1] |
-| `dueDate` | `DateTime` | When the card is next due for review (UTC) |
-| `lastReview` | `DateTime?` | Timestamp of the most recent review (null for New cards) |
-| `reviewCount` | `int` | Total number of reviews performed on this card |
-| `lapseCount` | `int` | Number of times the card has been forgotten (Again in Review) |
+| `stability` | `Double` | S — days until R drops to 90%; initially set by first review rating |
+| `difficulty` | `Double` | D — inherent card difficulty, range [1, 10] |
+| `retrievability` | `Double` | R — estimated recall probability at review time, range [0, 1] |
+| `dueDate` | `Date` | When the card is next due for review (UTC) |
+| `lastReview` | `Date?` | Timestamp of the most recent review (nil for New cards) |
+| `reviewCount` | `Int` | Total number of reviews performed on this card |
+| `lapseCount` | `Int` | Number of times the card has been forgotten (Again in Review) |
 | `state` | `CardState` | Current scheduling state |
-| `elapsedDays` | `int` | Days since lastReview at the time of the last review (used in stability formula) |
+| `elapsedDays` | `Int` | Days since lastReview at the time of the last review (used in stability formula) |
 
 ### 2.3 SchedulingResult
 
-The output of `scheduleReview()`. Immutable value object.
+The output of `scheduleReview()`. Immutable value type.
 
-| Field | Dart type | Description |
+| Field | Swift type | Description |
 |---|---|---|
 | `card` | `FSRSCard` | Updated card with new stability, difficulty, state, dueDate |
 | `reviewLog` | `ReviewLog` | Audit record for Supabase persistence |
 
 ### 2.4 ReviewLog fields
 
-| Field | Dart type | Description |
+| Field | Swift type | Description |
 |---|---|---|
 | `cardId` | `String` | FK to vocabulary_item |
 | `rating` | `Rating` | The rating given (Again/Hard/Good/Easy) |
 | `state` | `CardState` | State the card was in when reviewed |
-| `stability` | `double` | Stability after this review |
-| `difficulty` | `double` | Difficulty after this review |
-| `retrievability` | `double` | Retrievability at the moment of review |
-| `scheduledDays` | `int` | Number of days until next due |
-| `reviewedAt` | `DateTime` | UTC timestamp of review |
+| `stability` | `Double` | Stability after this review |
+| `difficulty` | `Double` | Difficulty after this review |
+| `retrievability` | `Double` | Retrievability at the moment of review |
+| `scheduledDays` | `Int` | Number of days until next due |
+| `reviewedAt` | `Date` | UTC timestamp of review |
 
 ---
 
@@ -294,7 +294,7 @@ user_card_states (per user, per card)
   updated_at      TIMESTAMPTZ DEFAULT now()
 ```
 
-The Flutter `FSRSCard` model is constructed by joining these two tables on `vocabulary_id`.
+The SwiftUI `FSRSCard` model is constructed by joining these two tables on `vocabulary_id`.
 
 ### 6.2 Review trigger in lesson flow
 
@@ -356,446 +356,399 @@ session start. Until then, the default parameters in `FSRSParameters` are used.
 
 ---
 
-## 7. Dart Skeleton Code
+## 7. Swift Skeleton Code
 
-The following file should live at `lib/services/srs/fsrs.dart`.
+The following file should live at `Sources/Services/SRS/FSRS.swift`.
 
-```dart
-// lib/services/srs/fsrs.dart
+```swift
+// Sources/Services/SRS/FSRS.swift
 //
-// FSRS v4 Spaced Repetition Scheduler — Dart skeleton
+// FSRS v4 Spaced Repetition Scheduler — Swift skeleton
 // Reference: https://github.com/open-spaced-repetition/fsrs4anki
 //
 // This file is skeleton/specification code.
-// Production implementation should add: error handling, freezed codegen,
+// Production implementation should add: error handling, Codable extensions,
 // Supabase serialisation, and unit tests.
 
-import 'dart:math' as math;
+import Foundation
 
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
 
-enum CardState { newCard, learning, review, relearning }
+enum CardState: String, Codable {
+    case newCard     = "new"
+    case learning    = "learning"
+    case review      = "review"
+    case relearning  = "relearning"
+}
 
-enum Rating {
-  again(1),
-  hard(2),
-  good(3),
-  easy(4);
-
-  const Rating(this.value);
-  final int value;
+enum Rating: Int, Codable {
+    case again = 1
+    case hard  = 2
+    case good  = 3
+    case easy  = 4
 }
 
 // ---------------------------------------------------------------------------
 // FSRSParameters — 17 trainable weights with FSRS v4 defaults
 // ---------------------------------------------------------------------------
 
-class FSRSParameters {
-  const FSRSParameters({
-    this.w0  = 0.4072,   // initial stability: Again
-    this.w1  = 1.1829,   // initial stability: Hard
-    this.w2  = 3.1262,   // initial stability: Good
-    this.w3  = 7.9334,   // initial stability: Easy
-    this.w4  = 7.1949,   // initial difficulty baseline
-    this.w5  = 0.5345,   // difficulty mean-reversion coefficient
-    this.w6  = 1.4604,   // difficulty shift per rating step
-    this.w7  = 0.1030,   // stability recall: e^w7 multiplier
-    this.w8  = 1.9395,   // stability recall: S^(-w8) decay
-    this.w9  = 0.1100,   // stability recall: spacing effect weight
-    this.w10 = 0.2900,   // hard penalty multiplier (< 1)
-    this.w11 = 2.6100,   // easy bonus multiplier  (> 1)
-    this.w12 = 0.0100,   // post-lapse stability base
-    this.w13 = 0.9000,   // post-lapse stability: prior-S exponent
-    this.w14 = 0.2000,   // post-lapse stability: difficulty factor
-    this.w15 = 1.0000,   // post-lapse stability: retrievability factor
-    this.w16 = 1.0000,   // post-lapse stability: short-term factor
-    this.requestedRetention = 0.9, // target recall probability (R_d)
-    this.maximumInterval    = 36500, // ~100 years ceiling
-  });
+struct FSRSParameters: Codable {
+    var w0:  Double = 0.4072   // initial stability: Again
+    var w1:  Double = 1.1829   // initial stability: Hard
+    var w2:  Double = 3.1262   // initial stability: Good
+    var w3:  Double = 7.9334   // initial stability: Easy
+    var w4:  Double = 7.1949   // initial difficulty baseline
+    var w5:  Double = 0.5345   // difficulty mean-reversion coefficient
+    var w6:  Double = 1.4604   // difficulty shift per rating step
+    var w7:  Double = 0.1030   // stability recall: e^w7 multiplier
+    var w8:  Double = 1.9395   // stability recall: S^(-w8) decay
+    var w9:  Double = 0.1100   // stability recall: spacing effect weight
+    var w10: Double = 0.2900   // hard penalty multiplier (< 1)
+    var w11: Double = 2.6100   // easy bonus multiplier  (> 1)
+    var w12: Double = 0.0100   // post-lapse stability base
+    var w13: Double = 0.9000   // post-lapse stability: prior-S exponent
+    var w14: Double = 0.2000   // post-lapse stability: difficulty factor
+    var w15: Double = 1.0000   // post-lapse stability: retrievability factor
+    var w16: Double = 1.0000   // post-lapse stability: short-term factor
+    var requestedRetention: Double = 0.9   // target recall probability (R_d)
+    var maximumInterval:    Int    = 36500 // ~100 years ceiling
 
-  final double w0,  w1,  w2,  w3;
-  final double w4,  w5,  w6;
-  final double w7,  w8,  w9,  w10, w11;
-  final double w12, w13, w14, w15, w16;
-  final double requestedRetention;
-  final int    maximumInterval;
-
-  /// Initial stability for first-time reviews, indexed by Rating.value (1-4).
-  double initialStability(Rating rating) {
-    switch (rating) {
-      case Rating.again: return w0;
-      case Rating.hard:  return w1;
-      case Rating.good:  return w2;
-      case Rating.easy:  return w3;
+    /// Initial stability for first-time reviews, indexed by Rating.rawValue (1-4).
+    func initialStability(_ rating: Rating) -> Double {
+        switch rating {
+        case .again: return w0
+        case .hard:  return w1
+        case .good:  return w2
+        case .easy:  return w3
+        }
     }
-  }
 
-  /// D_0(4) — the easy-baseline used as mean-reversion anchor in difficulty update.
-  double get difficultyMeanReversionTarget => w4 - w6 * (4 - 3);
-
-  FSRSParameters copyWith({
-    double? w0,  double? w1,  double? w2,  double? w3,
-    double? w4,  double? w5,  double? w6,
-    double? w7,  double? w8,  double? w9,  double? w10, double? w11,
-    double? w12, double? w13, double? w14, double? w15, double? w16,
-    double? requestedRetention,
-    int?    maximumInterval,
-  }) {
-    return FSRSParameters(
-      w0:  w0  ?? this.w0,   w1:  w1  ?? this.w1,
-      w2:  w2  ?? this.w2,   w3:  w3  ?? this.w3,
-      w4:  w4  ?? this.w4,   w5:  w5  ?? this.w5,   w6:  w6  ?? this.w6,
-      w7:  w7  ?? this.w7,   w8:  w8  ?? this.w8,   w9:  w9  ?? this.w9,
-      w10: w10 ?? this.w10,  w11: w11 ?? this.w11,
-      w12: w12 ?? this.w12,  w13: w13 ?? this.w13,
-      w14: w14 ?? this.w14,  w15: w15 ?? this.w15,  w16: w16 ?? this.w16,
-      requestedRetention: requestedRetention ?? this.requestedRetention,
-      maximumInterval:    maximumInterval    ?? this.maximumInterval,
-    );
-  }
+    /// D_0(4) — the easy-baseline used as mean-reversion anchor in difficulty update.
+    var difficultyMeanReversionTarget: Double {
+        w4 - w6 * Double(4 - 3)
+    }
 }
 
 // ---------------------------------------------------------------------------
-// FSRSCard — immutable value object (use copyWith to produce updated cards)
+// FSRSCard — value type (mutate via copyWith to produce updated cards)
 // ---------------------------------------------------------------------------
 
-class FSRSCard {
-  const FSRSCard({
-    required this.id,
-    this.stability    = 0.0,
-    this.difficulty   = 5.0,  // mid-range default
-    this.retrievability = 0.0,
-    required this.dueDate,
-    this.lastReview,
-    this.reviewCount  = 0,
-    this.lapseCount   = 0,
-    this.state        = CardState.newCard,
-    this.elapsedDays  = 0,
-  });
+struct FSRSCard: Codable {
+    let id:              String
+    var stability:       Double    = 0.0
+    var difficulty:      Double    = 5.0   // mid-range default
+    var retrievability:  Double    = 0.0
+    var dueDate:         Date
+    var lastReview:      Date?     = nil
+    var reviewCount:     Int       = 0
+    var lapseCount:      Int       = 0
+    var state:           CardState = .newCard
+    var elapsedDays:     Int       = 0     // days between last two reviews (used in S'_r formula)
 
-  final String    id;
-  final double    stability;
-  final double    difficulty;
-  final double    retrievability;
-  final DateTime  dueDate;
-  final DateTime? lastReview;
-  final int       reviewCount;
-  final int       lapseCount;
-  final CardState state;
-  final int       elapsedDays;   // days between last two reviews (used in S'_r formula)
+    func copyWith(
+        stability:      Double?    = nil,
+        difficulty:     Double?    = nil,
+        retrievability: Double?    = nil,
+        dueDate:        Date?      = nil,
+        lastReview:     Date?      = nil,
+        reviewCount:    Int?       = nil,
+        lapseCount:     Int?       = nil,
+        state:          CardState? = nil,
+        elapsedDays:    Int?       = nil
+    ) -> FSRSCard {
+        var copy = self
+        if let v = stability      { copy.stability      = v }
+        if let v = difficulty     { copy.difficulty      = v }
+        if let v = retrievability { copy.retrievability  = v }
+        if let v = dueDate        { copy.dueDate         = v }
+        if let v = lastReview     { copy.lastReview      = v }
+        if let v = reviewCount    { copy.reviewCount     = v }
+        if let v = lapseCount     { copy.lapseCount      = v }
+        if let v = state          { copy.state           = v }
+        if let v = elapsedDays    { copy.elapsedDays     = v }
+        return copy
+    }
 
-  FSRSCard copyWith({
-    double?    stability,
-    double?    difficulty,
-    double?    retrievability,
-    DateTime?  dueDate,
-    DateTime?  lastReview,
-    int?       reviewCount,
-    int?       lapseCount,
-    CardState? state,
-    int?       elapsedDays,
-  }) {
-    return FSRSCard(
-      id:              id,
-      stability:       stability       ?? this.stability,
-      difficulty:      difficulty      ?? this.difficulty,
-      retrievability:  retrievability  ?? this.retrievability,
-      dueDate:         dueDate         ?? this.dueDate,
-      lastReview:      lastReview      ?? this.lastReview,
-      reviewCount:     reviewCount     ?? this.reviewCount,
-      lapseCount:      lapseCount      ?? this.lapseCount,
-      state:           state           ?? this.state,
-      elapsedDays:     elapsedDays     ?? this.elapsedDays,
-    );
-  }
-
-  /// Convenience: days elapsed since lastReview as of [now].
-  int daysSinceLastReview(DateTime now) {
-    if (lastReview == null) return 0;
-    return now.difference(lastReview!).inDays;
-  }
+    /// Convenience: days elapsed since lastReview as of `now`.
+    func daysSinceLastReview(_ now: Date) -> Int {
+        guard let lastReview = lastReview else { return 0 }
+        return Calendar.current.dateComponents([.day], from: lastReview, to: now).day ?? 0
+    }
 }
 
 // ---------------------------------------------------------------------------
 // ReviewLog — immutable audit record written to Supabase after every review
 // ---------------------------------------------------------------------------
 
-class ReviewLog {
-  const ReviewLog({
-    required this.cardId,
-    required this.rating,
-    required this.stateBefore,
-    required this.stability,
-    required this.difficulty,
-    required this.retrievability,
-    required this.scheduledDays,
-    required this.reviewedAt,
-  });
+struct ReviewLog: Codable {
+    let cardId:         String
+    let rating:         Rating
+    let stateBefore:    CardState
+    let stability:      Double
+    let difficulty:     Double
+    let retrievability: Double
+    let scheduledDays:  Int
+    let reviewedAt:     Date
 
-  final String    cardId;
-  final Rating    rating;
-  final CardState stateBefore;
-  final double    stability;
-  final double    difficulty;
-  final double    retrievability;
-  final int       scheduledDays;
-  final DateTime  reviewedAt;
-
-  Map<String, dynamic> toJson() => {
-    'card_id':        cardId,
-    'rating':         rating.value,
-    'state':          stateBefore.name,
-    'stability':      stability,
-    'difficulty':     difficulty,
-    'retrievability': retrievability,
-    'scheduled_days': scheduledDays,
-    'reviewed_at':    reviewedAt.toIso8601String(),
-  };
+    func toJson() -> [String: Any] {
+        let formatter = ISO8601DateFormatter()
+        return [
+            "card_id":        cardId,
+            "rating":         rating.rawValue,
+            "state":          stateBefore.rawValue,
+            "stability":      stability,
+            "difficulty":     difficulty,
+            "retrievability": retrievability,
+            "scheduled_days": scheduledDays,
+            "reviewed_at":    formatter.string(from: reviewedAt),
+        ]
+    }
 }
 
 // ---------------------------------------------------------------------------
 // SchedulingResult — output of FSRSScheduler.scheduleReview()
 // ---------------------------------------------------------------------------
 
-class SchedulingResult {
-  const SchedulingResult({
-    required this.card,
-    required this.reviewLog,
-  });
-
-  final FSRSCard  card;
-  final ReviewLog reviewLog;
+struct SchedulingResult {
+    let card:      FSRSCard
+    let reviewLog: ReviewLog
 }
 
 // ---------------------------------------------------------------------------
 // FSRSScheduler — core algorithm
 // ---------------------------------------------------------------------------
 
-class FSRSScheduler {
-  const FSRSScheduler({FSRSParameters? parameters})
-      : params = parameters ?? const FSRSParameters();
+final class FSRSScheduler {
+    let params: FSRSParameters
 
-  final FSRSParameters params;
-
-  // -------------------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------------------
-
-  /// Returns R(t, S): estimated probability of recall right now.
-  /// Uses the power-law forgetting curve: R = (1 + t/(9*S))^(-1)
-  double calculateRetrievability(FSRSCard card, DateTime now) {
-    if (card.state == CardState.newCard || card.lastReview == null) return 0.0;
-    final double t = card.daysSinceLastReview(now).toDouble();
-    final double s = card.stability;
-    if (s <= 0) return 0.0;
-    return math.pow(1.0 + t / (9.0 * s), -1.0).toDouble();
-  }
-
-  /// Core scheduling method. Returns an updated FSRSCard and a ReviewLog.
-  SchedulingResult scheduleReview(FSRSCard card, Rating rating, {DateTime? now}) {
-    final DateTime reviewedAt = now ?? DateTime.now().toUtc();
-    final double r = calculateRetrievability(card, reviewedAt);
-
-    FSRSCard updated;
-
-    switch (card.state) {
-      case CardState.newCard:
-        updated = _scheduleNew(card, rating, reviewedAt);
-        break;
-      case CardState.learning:
-      case CardState.relearning:
-        updated = _scheduleLearning(card, rating, reviewedAt, r);
-        break;
-      case CardState.review:
-        updated = _scheduleReview(card, rating, reviewedAt, r);
-        break;
+    init(parameters: FSRSParameters = FSRSParameters()) {
+        self.params = parameters
     }
 
-    final log = ReviewLog(
-      cardId:         card.id,
-      rating:         rating,
-      stateBefore:    card.state,
-      stability:      updated.stability,
-      difficulty:     updated.difficulty,
-      retrievability: r,
-      scheduledDays:  updated.dueDate.difference(reviewedAt).inDays,
-      reviewedAt:     reviewedAt,
-    );
+    // -------------------------------------------------------------------------
+    // Public API
+    // -------------------------------------------------------------------------
 
-    return SchedulingResult(card: updated, reviewLog: log);
-  }
-
-  // -------------------------------------------------------------------------
-  // Private scheduling handlers
-  // -------------------------------------------------------------------------
-
-  /// First review of a brand-new card. Stability is set by initial w values.
-  FSRSCard _scheduleNew(FSRSCard card, Rating rating, DateTime reviewedAt) {
-    final double s = params.initialStability(rating);
-    final double d = _initialDifficulty(rating);
-
-    CardState nextState;
-    DateTime  due;
-
-    if (rating == Rating.again) {
-      nextState = CardState.learning;
-      due       = reviewedAt.add(const Duration(minutes: 1));
-    } else if (rating == Rating.hard) {
-      nextState = CardState.learning;
-      due       = reviewedAt.add(const Duration(minutes: 5));
-    } else if (rating == Rating.good) {
-      nextState = CardState.learning;
-      due       = reviewedAt.add(const Duration(minutes: 10));
-    } else {
-      // Easy — skip learning phase, graduate immediately
-      nextState = CardState.review;
-      due       = reviewedAt.add(Duration(days: _nextInterval(s)));
+    /// Returns R(t, S): estimated probability of recall right now.
+    /// Uses the power-law forgetting curve: R = (1 + t/(9*S))^(-1)
+    func calculateRetrievability(_ card: FSRSCard, now: Date) -> Double {
+        if card.state == .newCard || card.lastReview == nil { return 0.0 }
+        let t = Double(card.daysSinceLastReview(now))
+        let s = card.stability
+        if s <= 0 { return 0.0 }
+        return pow(1.0 + t / (9.0 * s), -1.0)
     }
 
-    return card.copyWith(
-      stability:      s,
-      difficulty:     d,
-      retrievability: 1.0,
-      dueDate:        due,
-      lastReview:     reviewedAt,
-      reviewCount:    card.reviewCount + 1,
-      state:          nextState,
-      elapsedDays:    0,
-    );
-  }
+    /// Core scheduling method. Returns an updated FSRSCard and a ReviewLog.
+    func scheduleReview(_ card: FSRSCard, rating: Rating, now: Date? = nil) -> SchedulingResult {
+        let reviewedAt = now ?? Date()
+        let r = calculateRetrievability(card, now: reviewedAt)
 
-  /// Review during Learning or Relearning phase (short fixed intervals).
-  FSRSCard _scheduleLearning(
-    FSRSCard card, Rating rating, DateTime reviewedAt, double r) {
+        let updated: FSRSCard
 
-    final double d = _updateDifficulty(card.difficulty, rating);
-    double s = card.stability;
-    CardState nextState = card.state;
-    DateTime  due;
+        switch card.state {
+        case .newCard:
+            updated = scheduleNew(card, rating: rating, reviewedAt: reviewedAt)
+        case .learning, .relearning:
+            updated = scheduleLearning(card, rating: rating, reviewedAt: reviewedAt, r: r)
+        case .review:
+            updated = scheduleReviewState(card, rating: rating, reviewedAt: reviewedAt, r: r)
+        }
 
-    if (rating == Rating.again) {
-      // Restart learning
-      due = reviewedAt.add(const Duration(minutes: 10));
-    } else if (rating == Rating.hard) {
-      due = reviewedAt.add(const Duration(minutes: 20));
-    } else if (rating == Rating.good) {
-      // Graduate to Review
-      nextState = CardState.review;
-      s         = math.max(s, 1.0);
-      due       = reviewedAt.add(Duration(days: _nextInterval(s)));
-    } else {
-      // Easy — graduate with bonus
-      nextState = CardState.review;
-      s         = s * params.w11;
-      due       = reviewedAt.add(Duration(days: _nextInterval(s)));
+        let scheduledDays = Calendar.current.dateComponents(
+            [.day], from: reviewedAt, to: updated.dueDate
+        ).day ?? 0
+
+        let log = ReviewLog(
+            cardId:         card.id,
+            rating:         rating,
+            stateBefore:    card.state,
+            stability:      updated.stability,
+            difficulty:     updated.difficulty,
+            retrievability: r,
+            scheduledDays:  scheduledDays,
+            reviewedAt:     reviewedAt
+        )
+
+        return SchedulingResult(card: updated, reviewLog: log)
     }
 
-    return card.copyWith(
-      stability:      s,
-      difficulty:     d,
-      retrievability: r,
-      dueDate:        due,
-      lastReview:     reviewedAt,
-      reviewCount:    card.reviewCount + 1,
-      state:          nextState,
-      elapsedDays:    card.daysSinceLastReview(reviewedAt),
-    );
-  }
+    // -------------------------------------------------------------------------
+    // Private scheduling handlers
+    // -------------------------------------------------------------------------
 
-  /// Review in the spaced-repetition (Review) state.
-  FSRSCard _scheduleReview(
-    FSRSCard card, Rating rating, DateTime reviewedAt, double r) {
+    /// First review of a brand-new card. Stability is set by initial w values.
+    private func scheduleNew(_ card: FSRSCard, rating: Rating, reviewedAt: Date) -> FSRSCard {
+        let s = params.initialStability(rating)
+        let d = initialDifficulty(rating)
 
-    final int    t       = card.daysSinceLastReview(reviewedAt);
-    final double d       = _updateDifficulty(card.difficulty, rating);
-    double s;
-    CardState nextState;
-    DateTime  due;
-    int lapseCount       = card.lapseCount;
+        let nextState: CardState
+        let due: Date
 
-    if (rating == Rating.again) {
-      // Lapse
-      s         = _stabilityAfterForgetting(card.stability, d, r);
-      nextState = CardState.relearning;
-      lapseCount++;
-      due       = reviewedAt.add(const Duration(minutes: 10));
-    } else {
-      s         = _stabilityAfterRecall(card.stability, d, r, rating);
-      s         = s.clamp(1.0, params.maximumInterval.toDouble());
-      nextState = CardState.review;
-      due       = reviewedAt.add(Duration(days: _nextInterval(s)));
+        switch rating {
+        case .again:
+            nextState = .learning
+            due       = reviewedAt.addingTimeInterval(1 * 60)       // +1 min
+        case .hard:
+            nextState = .learning
+            due       = reviewedAt.addingTimeInterval(5 * 60)       // +5 min
+        case .good:
+            nextState = .learning
+            due       = reviewedAt.addingTimeInterval(10 * 60)      // +10 min
+        case .easy:
+            // Easy — skip learning phase, graduate immediately
+            nextState = .review
+            due       = reviewedAt.addingTimeInterval(Double(nextInterval(s)) * 86400)
+        }
+
+        return card.copyWith(
+            stability:      s,
+            difficulty:     d,
+            retrievability: 1.0,
+            dueDate:        due,
+            lastReview:     reviewedAt,
+            reviewCount:    card.reviewCount + 1,
+            state:          nextState,
+            elapsedDays:    0
+        )
     }
 
-    return card.copyWith(
-      stability:      s,
-      difficulty:     d,
-      retrievability: r,
-      dueDate:        due,
-      lastReview:     reviewedAt,
-      reviewCount:    card.reviewCount + 1,
-      lapseCount:     lapseCount,
-      state:          nextState,
-      elapsedDays:    t,
-    );
-  }
+    /// Review during Learning or Relearning phase (short fixed intervals).
+    private func scheduleLearning(
+        _ card: FSRSCard, rating: Rating, reviewedAt: Date, r: Double
+    ) -> FSRSCard {
+        let d = updateDifficulty(card.difficulty, rating: rating)
+        var s = card.stability
+        var nextState = card.state
+        let due: Date
 
-  // -------------------------------------------------------------------------
-  // Core FSRS formulas
-  // -------------------------------------------------------------------------
+        switch rating {
+        case .again:
+            // Restart learning
+            due = reviewedAt.addingTimeInterval(10 * 60)            // +10 min
+        case .hard:
+            due = reviewedAt.addingTimeInterval(20 * 60)            // +20 min
+        case .good:
+            // Graduate to Review
+            nextState = .review
+            s         = max(s, 1.0)
+            due       = reviewedAt.addingTimeInterval(Double(nextInterval(s)) * 86400)
+        case .easy:
+            // Easy — graduate with bonus
+            nextState = .review
+            s         = s * params.w11
+            due       = reviewedAt.addingTimeInterval(Double(nextInterval(s)) * 86400)
+        }
 
-  /// Formula 4.2 — Stability after successful recall.
-  /// S'_r = S * e^w7 * (11 - D) * S^(-w8) * (e^(w9*(1-R)) - 1) * modifier
-  double _stabilityAfterRecall(
-      double s, double d, double r, Rating rating) {
-    final double modifier = rating == Rating.hard
-        ? params.w10
-        : rating == Rating.easy
-            ? params.w11
-            : 1.0;
+        return card.copyWith(
+            stability:      s,
+            difficulty:     d,
+            retrievability: r,
+            dueDate:        due,
+            lastReview:     reviewedAt,
+            reviewCount:    card.reviewCount + 1,
+            state:          nextState,
+            elapsedDays:    card.daysSinceLastReview(reviewedAt)
+        )
+    }
 
-    final double growth = math.exp(params.w7)
-        * (11.0 - d)
-        * math.pow(s, -params.w8)
-        * (math.exp(params.w9 * (1.0 - r)) - 1.0)
-        * modifier;
+    /// Review in the spaced-repetition (Review) state.
+    private func scheduleReviewState(
+        _ card: FSRSCard, rating: Rating, reviewedAt: Date, r: Double
+    ) -> FSRSCard {
+        let t = card.daysSinceLastReview(reviewedAt)
+        let d = updateDifficulty(card.difficulty, rating: rating)
+        var s: Double
+        let nextState: CardState
+        let due: Date
+        var lapseCount = card.lapseCount
 
-    return s * (1.0 + growth);
-  }
+        if rating == .again {
+            // Lapse
+            s         = stabilityAfterForgetting(card.stability, d: d, r: r)
+            nextState = .relearning
+            lapseCount += 1
+            due       = reviewedAt.addingTimeInterval(10 * 60)      // +10 min
+        } else {
+            s         = stabilityAfterRecall(card.stability, d: d, r: r, rating: rating)
+            s         = min(max(s, 1.0), Double(params.maximumInterval))
+            nextState = .review
+            due       = reviewedAt.addingTimeInterval(Double(nextInterval(s)) * 86400)
+        }
 
-  /// Formula 4.3 — Stability after forgetting (lapse).
-  /// S'_f = w12 * D^(-w14) * ((S+1)^w13 - 1) * e^(w15*(1-R))
-  double _stabilityAfterForgetting(double s, double d, double r) {
-    return params.w12
-        * math.pow(d, -params.w14)
-        * (math.pow(s + 1.0, params.w13) - 1.0)
-        * math.exp(params.w15 * (1.0 - r));
-  }
+        return card.copyWith(
+            stability:      s,
+            difficulty:     d,
+            retrievability: r,
+            dueDate:        due,
+            lastReview:     reviewedAt,
+            reviewCount:    card.reviewCount + 1,
+            lapseCount:     lapseCount,
+            state:          nextState,
+            elapsedDays:    t
+        )
+    }
 
-  /// Formula 4.4 — Difficulty update with mean reversion.
-  /// D' = w5 * D_0(4) + (1 - w5) * (D - w6*(r-3)), clamped [1,10]
-  double _updateDifficulty(double d, Rating rating) {
-    final double anchor = params.difficultyMeanReversionTarget;
-    final double delta  = params.w6 * (rating.value - 3);
-    final double next   = params.w5 * anchor + (1.0 - params.w5) * (d - delta);
-    return next.clamp(1.0, 10.0);
-  }
+    // -------------------------------------------------------------------------
+    // Core FSRS formulas
+    // -------------------------------------------------------------------------
 
-  /// Formula 4.5 — Next interval from new stability and requested retention.
-  /// I = (9 * S) / (1/R_d - 1), rounded, clamped [1, maximumInterval]
-  int _nextInterval(double s) {
-    final double r  = params.requestedRetention;
-    final double interval = (9.0 * s) / (1.0 / r - 1.0);
-    return interval.round().clamp(1, params.maximumInterval);
-  }
+    /// Formula 4.2 — Stability after successful recall.
+    /// S'_r = S * e^w7 * (11 - D) * S^(-w8) * (e^(w9*(1-R)) - 1) * modifier
+    private func stabilityAfterRecall(
+        _ s: Double, d: Double, r: Double, rating: Rating
+    ) -> Double {
+        let modifier: Double = {
+            switch rating {
+            case .hard: return params.w10
+            case .easy: return params.w11
+            default:    return 1.0
+            }
+        }()
 
-  /// Initial difficulty for a brand-new card.
-  /// D_0(r) = w4 - w6 * (r - 3), clamped [1, 10]
-  double _initialDifficulty(Rating rating) {
-    final double d = params.w4 - params.w6 * (rating.value - 3);
-    return d.clamp(1.0, 10.0);
-  }
+        let growth = exp(params.w7)
+            * (11.0 - d)
+            * pow(s, -params.w8)
+            * (exp(params.w9 * (1.0 - r)) - 1.0)
+            * modifier
+
+        return s * (1.0 + growth)
+    }
+
+    /// Formula 4.3 — Stability after forgetting (lapse).
+    /// S'_f = w12 * D^(-w14) * ((S+1)^w13 - 1) * e^(w15*(1-R))
+    private func stabilityAfterForgetting(_ s: Double, d: Double, r: Double) -> Double {
+        return params.w12
+            * pow(d, -params.w14)
+            * (pow(s + 1.0, params.w13) - 1.0)
+            * exp(params.w15 * (1.0 - r))
+    }
+
+    /// Formula 4.4 — Difficulty update with mean reversion.
+    /// D' = w5 * D_0(4) + (1 - w5) * (D - w6*(r-3)), clamped [1,10]
+    private func updateDifficulty(_ d: Double, rating: Rating) -> Double {
+        let anchor = params.difficultyMeanReversionTarget
+        let delta  = params.w6 * (Double(rating.rawValue) - 3.0)
+        let next   = params.w5 * anchor + (1.0 - params.w5) * (d - delta)
+        return min(max(next, 1.0), 10.0)
+    }
+
+    /// Formula 4.5 — Next interval from new stability and requested retention.
+    /// I = (9 * S) / (1/R_d - 1), rounded, clamped [1, maximumInterval]
+    private func nextInterval(_ s: Double) -> Int {
+        let r = params.requestedRetention
+        let interval = (9.0 * s) / (1.0 / r - 1.0)
+        return min(max(Int(interval.rounded()), 1), params.maximumInterval)
+    }
+
+    /// Initial difficulty for a brand-new card.
+    /// D_0(r) = w4 - w6 * (r - 3), clamped [1, 10]
+    private func initialDifficulty(_ rating: Rating) -> Double {
+        let d = params.w4 - params.w6 * (Double(rating.rawValue) - 3.0)
+        return min(max(d, 1.0), 10.0)
+    }
 }
 ```
 
@@ -861,3 +814,4 @@ Before shipping the FSRS implementation, the following cases must pass:
 - [ ] Retrievability ≈ 0.9 at t = S days (definition of stability)
 - [ ] nextInterval respects maximumInterval ceiling
 - [ ] ReviewLog.toJson() produces keys matching Supabase column names
+- [ ] All model types conform to Codable for supabase-swift serialisation

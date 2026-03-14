@@ -11,8 +11,8 @@
 
 1. [PoC Scope](#1-poc-scope)
 2. [Architecture Diagram](#2-architecture-diagram)
-3. [Flutter Project Structure](#3-flutter-project-structure)
-4. [Flutter Dependencies](#4-flutter-dependencies)
+3. [Xcode Project Structure](#3-xcode-project-structure)
+4. [Swift Package Dependencies](#4-swift-package-dependencies)
 5. [Dev Environment Setup](#5-dev-environment-setup)
 6. [Sprint 1 Task Breakdown](#6-sprint-1-task-breakdown)
 7. [Definition of Done](#7-definition-of-done)
@@ -32,7 +32,7 @@ is in scope for Sprint 1.
 | 1 | Email + password registration and login | Supabase Auth; profile row auto-created via DB trigger |
 | 2 | Skill tree screen: 1 unit (Unit 1: Greetings), unlocked | Static seed data; no unlock logic yet |
 | 3 | Lesson session: 5 vocabulary cards, Multiple Choice (L2 → L1) | Kurdish prompt → choose English answer |
-| 4 | FSRS card state updated locally in Drift/SQLite after each answer | Full FSRS v4 scheduling; no network needed |
+| 4 | FSRS card state updated locally in SwiftData/SQLite after each answer | Full FSRS v4 scheduling; no network needed |
 | 5 | Session complete screen: score (correct / total) + XP earned | XP = 10 per correct answer, flat |
 | 6 | Foreground sync: dirty FSRS cards pushed to Supabase on app resume | `AppLifecycleListener`; retry up to 5 times |
 | 7 | Character picker bar on any text input screen | Inserts ê / î / û / ç / ş above system keyboard |
@@ -54,29 +54,29 @@ is in scope for Sprint 1.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Flutter App (Dart)                           │
+│                     Kurdlingo iOS App (SwiftUI)                       │
 │                                                                      │
 │  ┌──────────────┐   ┌──────────────┐   ┌────────────────────────┐  │
-│  │  Auth Screen  │   │ Skill Tree   │   │    Lesson Screen       │  │
-│  │  (login/reg) │   │  Screen      │   │  (MC exercise widget)  │  │
+│  │  Auth View    │   │ Skill Tree   │   │    Lesson View         │  │
+│  │  (login/reg) │   │  View        │   │  (MC exercise view)    │  │
 │  └──────┬───────┘   └──────┬───────┘   └──────────┬─────────────┘  │
 │         │                  │                       │                 │
 │         └──────────────────┴───────────────────────┘                │
-│                            │ Riverpod providers                      │
+│                            │ @Observable view models                  │
 │         ┌──────────────────┴───────────────────────┐                │
 │         │                                           │                │
 │  ┌──────▼──────────┐                   ┌───────────▼──────────┐    │
 │  │  AuthRepository │                   │  LessonRepository    │    │
-│  │  (Supabase SDK) │                   │  (Drift + FSRS)      │    │
+│  │  (supabase-swift)│                  │  (SwiftData + FSRS)  │    │
 │  └──────┬──────────┘                   └───────────┬──────────┘    │
 │         │                                          │                 │
 │  ┌──────▼──────────────────────────────────────────▼──────────┐    │
 │  │                    SyncService                               │    │
-│  │  (AppLifecycleListener → flush dirty rows to Supabase)      │    │
+│  │  (ScenePhase observer → flush dirty rows to Supabase)       │    │
 │  └──────┬──────────────────────────────────────────┬──────────┘    │
 │         │                                           │                │
 │  ┌──────▼──────────┐                   ┌───────────▼──────────┐    │
-│  │  Supabase SDK   │                   │  Drift / SQLite      │    │
+│  │  supabase-swift │                   │  SwiftData            │    │
 │  │  (remote calls) │                   │  (local source of    │    │
 │  └──────┬──────────┘                   │   truth in-session)  │    │
 │         │                              └──────────────────────┘    │
@@ -97,159 +97,112 @@ is in scope for Sprint 1.
 └──────────────────────────────────────────────┘
 
 Data flow — lesson session:
-  1. App launches → SyncService.pullFsrsCards() → seeds Drift from Supabase
-  2. LessonRepository.loadLesson(unitId) → reads 5 vocabulary rows from Drift
-  3. User answers card → FSRSScheduler.scheduleReview() → writes card to Drift (is_dirty=1)
+  1. App launches → SyncService.pullFsrsCards() → seeds SwiftData from Supabase
+  2. LessonRepository.loadLesson(unitId) → reads 5 vocabulary rows from SwiftData
+  3. User answers card → FSRSScheduler.scheduleReview() → writes card to SwiftData (is_dirty=1)
   4. App foregrounded → SyncService.pushDirty() → upserts dirty cards to Supabase
 ```
 
 ---
 
-## 3. Flutter Project Structure
+## 3. Xcode Project Structure
 
-All source lives under `lib/`. Test files mirror this tree under `test/`.
+All source lives under `Kurdlingo/`. Tests go in `KurdlingoTests/`.
 
 ```
-kurdlingo/
-├── pubspec.yaml
-├── pubspec.lock
-├── analysis_options.yaml
-├── .env                          ← gitignored; holds SUPABASE_URL + SUPABASE_ANON_KEY
-├── assets/
-│   └── content/
-│       └── seed_unit_1.json      ← 5 PoC vocabulary items + unit metadata
+Kurdlingo/
+├── Kurdlingo.xcodeproj
+├── .env                              ← gitignored; holds SUPABASE_URL + SUPABASE_ANON_KEY
+├── Resources/
+│   └── seed_unit_1.json              ← 5 PoC vocabulary items + unit metadata
 ├── supabase/
 │   └── migrations/
 │       └── 001_initial_schema.sql
-└── lib/
-    ├── main.dart                 ← entry point; initialises Supabase + Drift; runs app
-    ├── app.dart                  ← MaterialApp.router with GoRouter; ProviderScope wrapper
+└── Kurdlingo/
+    ├── KurdlingoApp.swift             ← @main entry point; injects ModelContainer + Supabase
     │
-    ├── features/
-    │   ├── auth/
-    │   │   ├── auth_screen.dart           ← login / register tab view
-    │   │   ├── auth_controller.dart       ← Riverpod AsyncNotifier; calls AuthRepository
-    │   │   └── auth_repository.dart       ← wraps supabase.auth.signIn / signUp
+    ├── Features/
+    │   ├── Auth/
+    │   │   ├── AuthView.swift                ← login / register tab view
+    │   │   ├── AuthViewModel.swift           ← @Observable; calls AuthRepository
+    │   │   └── AuthRepository.swift          ← wraps supabase.auth.signIn / signUp
     │   │
-    │   ├── skill_tree/
-    │   │   ├── skill_tree_screen.dart     ← shows unit cards; taps navigate to lesson
-    │   │   ├── skill_tree_controller.dart ← Riverpod provider; loads units + progress
-    │   │   └── unit_card_widget.dart      ← single unit tile (locked/unlocked state)
+    │   ├── SkillTree/
+    │   │   ├── SkillTreeView.swift           ← shows unit cards; taps navigate to lesson
+    │   │   ├── SkillTreeViewModel.swift      ← @Observable; loads units + progress
+    │   │   └── UnitCardView.swift            ← single unit tile (locked/unlocked state)
     │   │
-    │   └── lesson/
-    │       ├── lesson_screen.dart         ← orchestrates card queue; shows progress bar
-    │       ├── lesson_controller.dart     ← AsyncNotifier; owns card queue + FSRS calls
-    │       ├── lesson_complete_screen.dart← score display + XP earned
-    │       └── exercises/
-    │           └── multiple_choice/
-    │               ├── mc_exercise_widget.dart    ← L2 prompt + 4 answer buttons
-    │               └── mc_distractors.dart        ← picks 3 wrong answers from vocab pool
+    │   └── Lesson/
+    │       ├── LessonView.swift              ← orchestrates card queue; shows progress bar
+    │       ├── LessonViewModel.swift         ← @Observable; owns card queue + FSRS calls
+    │       ├── LessonCompleteView.swift      ← score display + XP earned
+    │       └── Exercises/
+    │           └── MultipleChoice/
+    │               ├── MCExerciseView.swift  ← L2 prompt + 4 answer buttons
+    │               └── MCDistractors.swift   ← picks 3 wrong answers from vocab pool
     │
-    ├── services/
-    │   ├── srs/
-    │   │   └── fsrs.dart                 ← FSRS v4 scheduler (from srs-spec.md §7)
-    │   └── sync/
-    │       └── sync_service.dart         ← pull on launch; push dirty on foreground
+    ├── Services/
+    │   ├── SRS/
+    │   │   └── FSRS.swift                    ← FSRS v4 scheduler (from srs-spec.md §7)
+    │   └── Sync/
+    │       └── SyncService.swift             ← pull on launch; push dirty on foreground
     │
-    ├── data/
-    │   ├── local/
-    │   │   ├── app_database.dart         ← Drift database class (tables + DAOs)
-    │   │   ├── tables/
-    │   │   │   ├── fsrs_cards_table.dart ← Drift table definition
-    │   │   │   ├── vocabulary_table.dart ← local cache of vocabulary_items
-    │   │   │   ├── lesson_units_table.dart
-    │   │   │   └── user_progress_table.dart
-    │   │   └── daos/
-    │   │       ├── fsrs_cards_dao.dart   ← getDirty(), upsert(), markClean()
-    │   │       ├── vocabulary_dao.dart
-    │   │       ├── lesson_units_dao.dart
-    │   │       └── user_progress_dao.dart
+    ├── Data/
+    │   ├── Models/                           ← SwiftData @Model definitions
+    │   │   ├── FSRSCard.swift
+    │   │   ├── VocabularyItem.swift
+    │   │   ├── LessonUnit.swift
+    │   │   └── UserProgress.swift
     │   │
-    │   └── remote/
-    │       ├── supabase_client.dart      ← singleton Supabase client provider
-    │       ├── vocabulary_remote.dart    ← fetchAll(), fetchByUnit()
-    │       ├── fsrs_cards_remote.dart    ← upsertBatch(), fetchByUser()
-    │       └── user_progress_remote.dart ← upsertProgress()
+    │   └── Remote/
+    │       ├── SupabaseManager.swift         ← singleton Supabase client
+    │       ├── VocabularyRemote.swift        ← fetchAll(), fetchByUnit()
+    │       ├── FSRSCardsRemote.swift         ← upsertBatch(), fetchByUser()
+    │       └── UserProgressRemote.swift      ← upsertProgress()
     │
-    └── shared/
-        ├── models/
-        │   ├── vocabulary_item.dart      ← freezed value object
-        │   ├── lesson_unit.dart          ← freezed value object
-        │   └── lesson_result.dart        ← freezed; holds score + xp for complete screen
-        ├── providers/
-        │   └── app_providers.dart        ← top-level Riverpod providers (db, supabase)
-        └── widgets/
-            ├── char_picker_bar/
-            │   ├── char_picker_bar.dart  ← StatelessWidget; row of special-char buttons
-            │   └── char_picker_bar_test.dart  ← (in test/ mirror)
-            └── primary_button.dart       ← reusable styled button
+    └── Shared/
+        ├── DTOs/
+        │   ├── VocabularyItemDTO.swift       ← Codable for JSON/Supabase
+        │   ├── LessonUnitDTO.swift
+        │   └── LessonResult.swift            ← holds score + xp for complete screen
+        ├── Components/
+        │   ├── CharPickerBar.swift           ← SwiftUI View; row of special-char buttons
+        │   └── PrimaryButton.swift           ← reusable styled button
+        └── Navigation/
+            └── AppRouter.swift               ← NavigationStack + NavigationPath routing
+
+KurdlingoTests/
+    ├── FSRSTests.swift
+    ├── CharPickerBarTests.swift
+    └── SyncServiceTests.swift
 ```
 
-**File count:** ~30 Dart source files for the PoC. Every file has a single clear responsibility.
+**File count:** ~25 Swift source files for the PoC. Every file has a single clear responsibility.
 
 ---
 
-## 4. Flutter Dependencies
+## 4. Swift Package Dependencies
 
-Add to `pubspec.yaml`. Versions are the latest stable as of early 2026.
+Managed via Swift Package Manager (SPM) in Xcode.
 
-```yaml
-name: kurdlingo
-description: Duolingo-inspired Kurdish learning app — PoC
-publish_to: 'none'
-version: 0.1.0+1
+```swift
+// Package.swift dependencies (or add via Xcode → File → Add Package Dependencies)
 
-environment:
-  sdk: '>=3.3.0 <4.0.0'
-  flutter: '>=3.22.0'
-
-dependencies:
-  flutter:
-    sdk: flutter
-
-  # --- State management ---
-  flutter_riverpod: ^2.5.1
-  riverpod_annotation: ^2.3.5
-
-  # --- Navigation ---
-  go_router: ^14.2.0
-
-  # --- Supabase ---
-  supabase_flutter: ^2.5.3
-
-  # --- Local database (Drift / SQLite) ---
-  drift: ^2.20.0
-  drift_flutter: ^0.2.1          # bundles sqlite3 for Flutter
-  sqlite3_flutter_libs: ^0.5.24  # native SQLite3 for iOS + Android
-
-  # --- Code generation helpers ---
-  freezed_annotation: ^2.4.4
-  json_annotation: ^4.9.0
-
-  # --- Path provider (Drift DB location) ---
-  path_provider: ^2.1.3
-  path: ^1.9.0
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-
-  # --- Code generation ---
-  build_runner: ^2.4.9
-  riverpod_generator: ^2.4.3
-  freezed: ^2.5.2
-  json_serializable: ^6.8.0
-  drift_dev: ^2.20.0
-
-  # --- Linting ---
-  flutter_lints: ^4.0.0
+dependencies: [
+    // Supabase iOS SDK
+    .package(url: "https://github.com/supabase/supabase-swift", from: "2.0.0"),
+]
 ```
 
+**Built-in frameworks used (no packages needed):**
+- **SwiftUI** — UI framework
+- **SwiftData** — local persistence (Core Data successor)
+- **Foundation** — JSON decoding via `Codable`
+
 **Version notes:**
-- `supabase_flutter ^2.5.3` ships the GoTrue auth client and Realtime; no separate package needed.
-- `drift_flutter ^0.2.1` replaces the old `moor_flutter`; bundles the correct native SQLite for each platform without manual linking.
-- `sqlite3_flutter_libs` is required on Android (no system SQLite guarantee); on iOS the system SQLite is used but the package is still listed for parity.
-- Do not add `riverpod` directly — `flutter_riverpod` re-exports it.
+- `supabase-swift 2.x` includes Auth, Realtime, Storage, and PostgREST clients.
+- SwiftData is included in iOS 17+ — no external dependency needed.
+- No code generation step required (unlike Flutter's `build_runner`). Swift's `Codable` and `@Model` work at compile time.
 
 ---
 
@@ -259,43 +212,30 @@ dev_dependencies:
 
 | Tool | Required version | Install |
 |---|---|---|
-| Flutter SDK | 3.22.x stable | `flutter.dev/docs/get-started/install` |
-| Dart SDK | >=3.3.0 (bundled with Flutter) | Comes with Flutter |
+| SwiftUI SDK | 3.22.x stable | `swift.dev/docs/get-started/install` |
+| Swift SDK | >=3.3.0 (bundled with SwiftUI) | Comes with SwiftUI |
 | Supabase CLI | 1.x latest | `brew install supabase/tap/supabase` or `scoop install supabase` |
 | Docker Desktop | Any recent stable | Required by Supabase local dev stack |
 
 Verify before continuing:
 
 ```bash
-flutter doctor          # All checks green except optional items
+swift doctor          # All checks green except optional items
 supabase --version      # 1.x.x
 docker info             # Docker daemon running
 ```
 
-### 5.2 Clone and install Flutter dependencies
+### 5.2 Clone and open in Xcode
 
 ```bash
-git clone https://github.com/<org>/kurdlingo.git
+git clone https://github.com/Rlight21/kurdlingo.git
 cd kurdlingo
-flutter pub get
+open Kurdlingo.xcodeproj
 ```
 
-### 5.3 Run code generation
+Xcode automatically resolves SPM dependencies (supabase-swift). No code generation step needed.
 
-The project uses `build_runner` for Drift, Freezed, Riverpod, and json_serializable.
-Run this once after initial checkout and again after editing any annotated file:
-
-```bash
-dart run build_runner build --delete-conflicting-outputs
-```
-
-To watch for changes during development:
-
-```bash
-dart run build_runner watch --delete-conflicting-outputs
-```
-
-### 5.4 Start the local Supabase stack
+### 5.3 Start the local Supabase stack
 
 ```bash
 # From the project root (supabase/ directory must exist)
@@ -333,62 +273,36 @@ Verify in Supabase Studio (http://localhost:54323) that the following tables exi
 
 ### 5.6 Seed Unit 1 vocabulary
 
-Run the seed script (written in Dart, lives at `scripts/seed_unit1.dart`):
+Run the seed script (Swift command-line tool):
 
 ```bash
-dart run scripts/seed_unit1.dart \
+swift scripts/seed_unit1.swift \
   --url http://localhost:54321 \
   --service-key <service_role_key_from_supabase_start>
 ```
 
 This inserts 5 Kurmanji vocabulary items (Greetings unit) and the `lesson_units` row for Unit 1.
 
-### 5.7 Configure environment variables
+### 5.6 Configure environment variables
 
-Create `.env` in the project root (this file is gitignored):
+In Xcode, edit the scheme (Product → Scheme → Edit Scheme → Run → Arguments → Environment Variables):
 
 ```
-SUPABASE_URL=http://localhost:54321
-SUPABASE_ANON_KEY=<anon_key_from_supabase_start>
+SUPABASE_URL = http://localhost:54321
+SUPABASE_ANON_KEY = <anon_key_from_supabase_start>
 ```
 
-The app reads these at runtime via `--dart-define`. The `main.dart` entry point calls:
+The app reads these via `ProcessInfo.processInfo.environment` in `KurdlingoApp.swift`.
 
-```dart
-const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-```
+### 5.7 Run the app
 
-### 5.8 Run the app
+Select **iPhone 15 Pro** simulator in Xcode and press **Cmd+R**.
 
-**iOS Simulator:**
-```bash
-flutter run \
-  --dart-define=SUPABASE_URL=http://localhost:54321 \
-  --dart-define=SUPABASE_ANON_KEY=<anon_key> \
-  -d "iPhone 15 Pro"
-```
+### 5.8 Run tests
 
-**Android Emulator:**
-```bash
-# Android cannot reach localhost; use the host machine address
-flutter run \
-  --dart-define=SUPABASE_URL=http://10.0.2.2:54321 \
-  --dart-define=SUPABASE_ANON_KEY=<anon_key> \
-  -d emulator-5554
-```
+Press **Cmd+U** in Xcode (or Product → Test).
 
-**Convenience:** create a `Makefile` or `.vscode/launch.json` that bakes in the
-`--dart-define` flags so you don't paste them every run.
-
-### 5.9 Run tests
-
-```bash
-flutter test
-```
-
-Tests requiring a Drift in-memory DB use `NativeDatabase.memory()` — no additional
-setup needed.
+SwiftData tests use `ModelConfiguration(isStoredInMemoryOnly: true)` — no additional setup needed.
 
 ---
 
@@ -400,23 +314,23 @@ Tasks are ordered for a single developer executing them sequentially. Complexity
 | # | Task | Complexity | Notes |
 |---|---|---|---|
 | 1 | Supabase project setup (local CLI) + run `001_initial_schema.sql` | S | `supabase start && supabase db reset` |
-| 2 | Flutter project scaffold: `flutter create`, add all `pubspec.yaml` deps, run `flutter pub get` | S | |
-| 3 | Copy `fsrs.dart` skeleton from `srs-spec.md §7` into `lib/services/srs/fsrs.dart` | S | No changes needed; spec is production-ready |
-| 4 | Write FSRS unit tests (`test/services/srs/fsrs_test.dart`) against checklist in `srs-spec.md Appendix B` | M | Must pass before any lesson code is written |
-| 5 | Implement Drift local database: all 4 tables + DAOs (`app_database.dart`, tables/, daos/) | L | Run `build_runner` after writing table definitions |
-| 6 | Implement `AuthRepository` + `auth_screen.dart` (register + login flows) | M | Uses `supabase.auth.signUpWithPassword` and `signInWithPassword` |
-| 7 | Implement `SupabaseClient` provider + `VocabularyRemote` + `FsrsCardsRemote` | M | Thin wrappers around `supabase.from('table')` calls |
-| 8 | Implement `SyncService`: `pullFsrsCards()` on launch + `pushDirty()` on foreground | M | Use `AppLifecycleListener`; retry loop with `attempts < 5` guard |
-| 9 | Write seed script (`scripts/seed_unit1.dart`) and seed Unit 1 into local Supabase | S | 5 vocabulary rows + 1 lesson_unit row |
-| 10 | Implement `SkillTreeScreen` + `SkillTreeController` (reads units + user_progress from Drift) | M | Single unit card, unlocked, taps go to lesson |
-| 11 | Implement `LessonController`: load 5 cards, card queue state machine, call FSRS after each answer | L | Core lesson loop; must write card to Drift immediately after rating |
-| 12 | Implement `McExerciseWidget` (Kurdish prompt + 4 answer buttons) + `McDistractors` helper | M | Distractors: pick 3 random from remaining vocab pool |
-| 13 | Implement `LessonScreen` (progress bar + card queue rendering) | M | Feeds `LessonController`; no audio hooks needed |
-| 14 | Implement `LessonCompleteScreen` (score display, XP earned, back to skill tree) | S | Reads `LessonResult` freezed object from controller |
-| 15 | Implement `CharPickerBar` widget; wire it into `AuthScreen` and any future text inputs | S | Row of `TextButton`s; each calls `TextEditingController.text += char` |
-| 16 | Wire GoRouter: `/login`, `/skill-tree`, `/lesson/:unitId`, `/lesson-complete` | S | `GoRouter` redirect guard: unauthenticated → `/login` |
+| 2 | Xcode project scaffold: create project, add `supabase-swift` via SPM, configure signing | S | |
+| 3 | Copy `FSRS.swift` skeleton from `srs-spec.md §7` into `Services/SRS/FSRS.swift` | S | No changes needed; spec is production-ready |
+| 4 | Write FSRS unit tests (`KurdlingoTests/FSRSTests.swift`) against checklist in `srs-spec.md Appendix B` | M | Must pass before any lesson code is written |
+| 5 | Implement SwiftData @Model definitions: `FSRSCard`, `VocabularyItem`, `LessonUnit`, `UserProgress` | L | Configure `ModelContainer` in `KurdlingoApp.swift` |
+| 6 | Implement `AuthRepository` + `AuthView.swift` (register + login flows) | M | Uses `supabase.auth.signUp` and `supabase.auth.signIn` |
+| 7 | Implement `SupabaseManager` singleton + `VocabularyRemote` + `FSRSCardsRemote` | M | Thin wrappers around `supabase.from("table")` calls |
+| 8 | Implement `SyncService`: `pullFsrsCards()` on launch + `pushDirty()` on foreground | M | Use `ScenePhase` observer; retry loop with `attempts < 5` guard |
+| 9 | Write seed script (`scripts/seed_unit1.swift`) and seed Unit 1 into local Supabase | S | 5 vocabulary rows + 1 lesson_unit row |
+| 10 | Implement `SkillTreeView` + `SkillTreeViewModel` (reads units + user_progress from SwiftData) | M | Single unit card, unlocked, taps go to lesson |
+| 11 | Implement `LessonViewModel`: load 5 cards, card queue state machine, call FSRS after each answer | L | Core lesson loop; must write card to SwiftData immediately after rating |
+| 12 | Implement `MCExerciseView` (Kurdish prompt + 4 answer buttons) + `MCDistractors` helper | M | Distractors: pick 3 random from remaining vocab pool |
+| 13 | Implement `LessonView` (progress bar + card queue rendering) | M | Feeds `LessonViewModel`; no audio hooks needed |
+| 14 | Implement `LessonCompleteView` (score display, XP earned, back to skill tree) | S | Reads `LessonResult` Codable struct from view model |
+| 15 | Implement `CharPickerBar` SwiftUI view; wire it into `AuthView` and any future text inputs | S | Row of `Button`s; each inserts char into focused `TextField` via `@FocusState` |
+| 16 | Wire `NavigationStack` + `NavigationPath`: auth guard, skill tree, lesson, lesson complete | S | `NavigationStack` with `.navigationDestination` modifiers |
 | 17 | Integration smoke test: register → complete lesson → check Supabase Studio for synced cards | S | Manual; verify `fsrs_cards` rows exist in local Supabase |
-| 18 | Write widget tests for `CharPickerBar` (ê/î/û/ç/ş insertion on iOS + Android target) | S | `flutter_test`; use `tester.tap()` on each button |
+| 18 | Write XCTest UI tests for `CharPickerBar` (ê/î/û/ç/ş insertion) | S | `XCUIApplication`; tap each button and verify text field content |
 
 **Total estimated effort:** ~40–48 hours (1 developer, 1 sprint week).
 
@@ -436,34 +350,33 @@ The PoC sprint is complete when all of the following are true. No item may be sk
 - [ ] Selecting an answer reveals whether it was correct and shows the Again / Hard / Good / Easy FSRS rating buttons
 - [ ] After rating, the next card is shown; the progress bar advances
 - [ ] After the 5th card, the session complete screen shows the correct-answer count and XP earned
-- [ ] All 5 FSRS card states are persisted to the local Drift database immediately after rating (verified by re-launching the app and inspecting the DB via Drift DevTools or a direct SQLite query)
+- [ ] All 5 FSRS card states are persisted to the local SwiftData database immediately after rating (verified by re-launching the app and inspecting the DB via SwiftData DevTools or a direct SQLite query)
 - [ ] On app kill + relaunch, previously scheduled cards retain their `state`, `stability`, `difficulty`, and `due_date` (FSRS state survives app restart)
 - [ ] Bringing the app back to the foreground after a lesson triggers `SyncService.pushDirty()`; the updated `fsrs_cards` rows appear in Supabase Studio within 5 seconds on a healthy connection
 - [ ] The character picker bar is visible whenever a text field is focused on both the login screen and any screen with a text input
-- [ ] Tapping ê, î, û, ç, ş in the character picker bar inserts the correct Unicode character into the active text field on both iOS Simulator and Android Emulator
-- [ ] The app compiles and runs on iOS (Simulator, iPhone 15 Pro, iOS 17) without errors
-- [ ] The app compiles and runs on Android (Emulator, Pixel 8, API 34) without errors
+- [ ] Tapping ê, î, û, ç, ş in the character picker bar inserts the correct Unicode character into the active text field
+- [ ] The app compiles and runs on iOS Simulator (iPhone 15 Pro, iOS 17+) without errors
 
 ### Test checklist
 
-- [ ] All FSRS unit tests pass (`test/services/srs/fsrs_test.dart`), covering the 10 cases in `srs-spec.md Appendix B`
-- [ ] `CharPickerBar` widget tests pass: each of the 5 special characters is inserted correctly
-- [ ] `flutter test` exits with code 0 (no failing tests)
-- [ ] `flutter analyze` exits with code 0 (no lint errors)
+- [ ] All FSRS unit tests pass (`KurdlingoTests/FSRSTests.swift`), covering the 10 cases in `srs-spec.md Appendix B`
+- [ ] `CharPickerBar` UI tests pass: each of the 5 special characters is inserted correctly
+- [ ] All tests pass in Xcode (Cmd+U, exit code 0)
+- [ ] No compiler warnings in Xcode (Build Succeeded with 0 warnings)
 
 ### Code quality checklist
 
-- [ ] No hardcoded Supabase URLs or keys in source files; all secrets injected via `--dart-define`
+- [ ] No hardcoded Supabase URLs or keys in source files; all secrets injected via Xcode scheme environment variables
 - [ ] `.env` is listed in `.gitignore`
-- [ ] All Riverpod providers are typed (no `dynamic` providers)
-- [ ] Drift `is_dirty` flag is always set to `1` before the FSRS write returns — never left in an ambiguous state
+- [ ] All @Observable view models use explicit types (no `Any`)
+- [ ] SwiftData `isDirty` flag is always set to `true` before the FSRS write returns — never left in an ambiguous state
 - [ ] `SyncService.pushDirty()` handles network failure gracefully (increments `attempts`; stops retrying at 5)
 
 ---
 
 ## Appendix A — Seed Data Format
 
-`assets/content/seed_unit_1.json` (loaded by `scripts/seed_unit1.dart`):
+`assets/content/seed_unit_1.json` (loaded by `scripts/seed_unit1.swift`):
 
 ```json
 {
@@ -496,34 +409,34 @@ These are decisions already locked in the ADR. Do not re-debate them during Spri
 
 | Decision | Locked choice | Rationale summary |
 |---|---|---|
-| Local DB | Drift / SQLite | Offline-first FSRS; type-safe Dart DSL |
+| Local DB | SwiftData | Offline-first FSRS; native Apple persistence, iCloud-ready |
 | Sync strategy | Dirty flag + foreground push | Simpler than real-time subscriptions for PoC; good enough until multi-device sync is needed |
-| FSRS persistence | Drift is source of truth during session; Supabase is authoritative after sync | Avoids network latency on every card flip |
+| FSRS persistence | SwiftData is source of truth during session; Supabase is authoritative after sync | Avoids network latency on every card flip |
 | Conflict resolution | Last-write-wins on `updated_at` | Acceptable for single-device PoC; multi-device reconciliation is Sprint 3+ concern |
 | Auth | Supabase email+password | Simplest path; OAuth (Google/Apple) deferred |
 | Exercise type | Multiple Choice L2→L1 only | Fastest to build; proves the card queue and FSRS loop work end-to-end |
 | XP formula | 10 XP per correct answer, flat | No balancing needed for PoC; gamification spec (F4) will revise in Sprint 2 |
-| Character input | Picker bar above keyboard (not long-press) | Long-press is unreliable on Android; see CLAUDE.md |
+| Character input | Picker bar above keyboard | Clean UX; see CLAUDE.md |
 
 ---
 
-## Appendix C — Supabase Column Mapping (Dart ↔ DB)
+## Appendix C — Supabase Column Mapping (Swift ↔ DB)
 
 When serialising `FSRSCard` to the `fsrs_cards` Supabase table, use this mapping.
-The Drift local table uses identical column names.
+The SwiftData `@Model` uses Swift property names; Supabase uses snake_case.
 
-| Dart field | Supabase column | Drift column | Type |
+| Swift property | Supabase column | Swift type | DB type |
 |---|---|---|---|
-| `id` | `id` | `id` | UUID / TEXT |
-| `userId` | `user_id` | `user_id` | UUID / TEXT |
-| `vocabularyItemId` | `vocabulary_item_id` | `vocabulary_item_id` | UUID / TEXT |
-| `stability` | `stability` | `stability` | FLOAT8 / REAL |
-| `difficulty` | `difficulty` | `difficulty` | FLOAT8 / REAL |
-| `dueDate` | `due_date` | `due_date` | TIMESTAMPTZ / INTEGER (Unix ms) |
-| `lastReview` | `last_review` | `last_review` | TIMESTAMPTZ / INTEGER nullable |
-| `reviewCount` | `review_count` | `review_count` | INT |
-| `state` | `state` | `state` | TEXT |
-| `updatedAt` | `updated_at` | `updated_at` | TIMESTAMPTZ / INTEGER |
-| _(local only)_ | _(not in Supabase)_ | `is_dirty` | INTEGER (0/1) |
+| `id` | `id` | `UUID` | UUID |
+| `userId` | `user_id` | `UUID` | UUID |
+| `vocabularyItemId` | `vocabulary_item_id` | `UUID` | UUID |
+| `stability` | `stability` | `Double` | FLOAT8 |
+| `difficulty` | `difficulty` | `Double` | FLOAT8 |
+| `dueDate` | `due_date` | `Date` | TIMESTAMPTZ |
+| `lastReview` | `last_review` | `Date?` | TIMESTAMPTZ nullable |
+| `reviewCount` | `review_count` | `Int` | INT |
+| `state` | `state` | `String` | TEXT |
+| `updatedAt` | `updated_at` | `Date` | TIMESTAMPTZ |
+| `isDirty` | _(local only)_ | `Bool` | _(SwiftData only)_ |
 
-`is_dirty` is a Drift-only column. Never include it in Supabase upsert payloads.
+`isDirty` is a SwiftData-only property. Never include it in Supabase upsert payloads. Use `CodingKeys` to exclude it from `Codable` conformance.
